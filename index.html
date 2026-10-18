@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Stundenzettel</title>
+  <meta name="description" content="Arbeitszeiten erfassen und den Wochen-Stundenzettel als Excel-Datei per Mail senden.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Stunden">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="icons/icon-180.png?v=2">
+  <link rel="icon" type="image/png" href="icons/icon-192.png?v=2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <h1>Stundenzettel</h1>
+        <p id="prodName" class="muted">Arbeitszeiten erfassen</p>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" data-action="open-overview" aria-label="Übersicht">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="13"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="18" y1="20" x2="18" y2="10"/></svg>
+        </button>
+        <button class="icon-btn" data-action="open-settings" aria-label="Einstellungen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="banners"></div>
+
+    <section class="week" aria-label="Woche">
+      <button class="icon-btn" data-action="prev-week" aria-label="Vorherige Woche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="week-title">
+        <div id="kw" class="kw"></div>
+        <div id="range" class="range muted"></div>
+      </div>
+      <button class="icon-btn" data-action="next-week" aria-label="Nächste Woche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </section>
+
+    <section class="summary">
+      <span><span id="total" class="total"></span> <span class="sep">·</span> <span id="dayCount" class="muted"></span></span>
+      <span id="status"></span>
+      <button id="btnThisWeek" class="link" data-action="this-week" hidden>Zur aktuellen Woche</button>
+    </section>
+
+    <ul id="days" class="days"></ul>
+    <p class="foot muted">Alle Einträge bleiben nur auf diesem Gerät gespeichert.</p>
+  </div>
+
+  <div class="sendbar">
+    <button class="btn primary" data-action="open-send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Stundenzettel senden
+    </button>
+  </div>
+
+  <!-- Tag bearbeiten -->
+  <div id="dayOverlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
+      <div class="grabber"></div>
+      <div class="sheet-head">
+        <button class="icon-btn" data-action="prev-day" aria-label="Vorheriger Tag">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2 id="dayTitle"></h2>
+        <button class="icon-btn" data-action="next-day" aria-label="Nächster Tag">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="group">
+        <label class="row select-row" for="f-type">
+          <span class="label">Tagesart</span>
+          <select id="f-type"></select>
+          <span class="select-chev" aria-hidden="true">›</span>
+        </label>
+        <label class="row switch-row" id="cateringRow">
+          <span class="label">Teilnahme Catering</span>
+          <input id="f-catering" type="checkbox" class="switch">
+        </label>
+      </div>
+
+      <div class="group-label">Arbeitszeit</div>
+      <div class="group">
+        <div class="row">
+          <span class="label">Beginn</span>
+          <button class="tbtn empty" id="f-start" data-action="pick-time" data-field="start" aria-label="Arbeitsbeginn wählen">--:--</button>
+          <button class="x" data-action="clear-field" data-field="start" aria-label="Arbeitsbeginn löschen">×</button>
+          <button class="pill" data-action="now" data-field="start">Jetzt</button>
+        </div>
+        <div class="row">
+          <span class="label">Ende</span>
+          <button class="tbtn empty" id="f-end" data-action="pick-time" data-field="end" aria-label="Arbeitsende wählen">--:--</button>
+          <button class="x" data-action="clear-field" data-field="end" aria-label="Arbeitsende löschen">×</button>
+          <button class="pill" data-action="now" data-field="end">Jetzt</button>
+        </div>
+      </div>
+
+      <div class="group-label">Pause</div>
+      <div class="group">
+        <div class="row">
+          <span class="label">Beginn</span>
+          <button class="tbtn empty" id="f-pStart" data-action="pick-time" data-field="pStart" aria-label="Pausenbeginn wählen">--:--</button>
+          <button class="x" data-action="clear-field" data-field="pStart" aria-label="Pausenbeginn löschen">×</button>
+          <button class="pill" data-action="now" data-field="pStart">Jetzt</button>
+        </div>
+        <div class="row">
+          <span class="label">Ende</span>
+          <button class="tbtn empty" id="f-pEnd" data-action="pick-time" data-field="pEnd" aria-label="Pausenende wählen">--:--</button>
+          <button class="x" data-action="clear-field" data-field="pEnd" aria-label="Pausenende löschen">×</button>
+          <button class="pill" data-action="now" data-field="pEnd">Jetzt</button>
+        </div>
+        <div class="row chips">
+          <span class="label">Dauer</span>
+          <button class="pill" data-action="pause" data-min="30">30 Min</button>
+          <button class="pill" data-action="pause" data-min="45">45 Min</button>
+          <button class="pill" data-action="pause" data-min="60">60 Min</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <label for="f-note">Bemerkung</label>
+          <input id="f-note" type="text" list="noteList" placeholder="optional" autocomplete="off" enterkeyhint="done">
+        </div>
+      </div>
+      <datalist id="noteList"></datalist>
+
+      <div id="timePicker" class="tpicker" hidden>
+        <div class="wheel">
+          <div class="wheel-col" id="wheelH" aria-label="Stunde"></div>
+          <div class="wheel-sep" aria-hidden="true">:</div>
+          <div class="wheel-col" id="wheelM" aria-label="Minuten"></div>
+        </div>
+        <button class="btn primary tp-done" data-action="tp-done">Fertig</button>
+      </div>
+
+      <div id="dayCalc" class="calc"></div>
+      <ul id="dayWarn" class="issues" hidden></ul>
+
+      <div class="sheet-actions">
+        <button class="btn secondary" data-action="copy-last">Wie zuletzt</button>
+        <button class="btn secondary danger" data-action="clear-day">Tag leeren</button>
+      </div>
+      <button class="btn primary" data-action="close-day">Fertig</button>
+    </div>
+  </div>
+
+  <!-- Senden -->
+  <div id="sendOverlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
+      <div class="grabber"></div>
+      <button class="sheet-close" data-action="close-send" aria-label="Schließen">×</button>
+      <h2 id="sendTitle" class="title"></h2>
+      <p id="sendRange" class="muted center"></p>
+      <div class="stats">
+        <div><b id="sendTotal"></b><span>Stunden gesamt</span></div>
+        <div><b id="sendDays"></b><span>Arbeitstage</span></div>
+      </div>
+      <ul id="sendIssues" class="issues" hidden></ul>
+      <p id="sendOk" class="ok-line" hidden>Alles ausgefüllt.</p>
+
+      <div class="group">
+        <div class="row" id="sendTo" hidden>
+          <span class="label"><span class="muted">An</span><br><span id="sendToAddr"></span></span>
+          <button class="pill" data-action="copy-to">Kopieren</button>
+        </div>
+        <div class="row">
+          <span class="label"><span class="muted">Betreff</span><br><span id="sendSubject"></span></span>
+          <button class="pill" data-action="copy-subject">Kopieren</button>
+        </div>
+        <dl class="kv row">
+          <dt>Datei</dt><dd id="sendFile"></dd>
+          <dt>Unterschrift</dt><dd id="sendSig"></dd>
+        </dl>
+      </div>
+
+      <p class="send-hint">Mit Kurzbefehl: im Teilen-Menü <b>Stundenzettel senden</b> wählen – alles ist ausgefüllt. Sonst <b>Mail</b> wählen: der Betreff ist schon kopiert, in der Mail ins Betreff-Feld tippen → <b>Einsetzen</b>.</p>
+      <div class="segmented three" id="formatSeg" role="tablist" aria-label="Format">
+        <button role="tab" data-action="send-format" data-format="xlsx">Excel</button>
+        <button role="tab" data-action="send-format" data-format="pdf">PDF</button>
+        <button role="tab" data-action="send-format" data-format="both">Beide</button>
+      </div>
+      <div class="stack">
+        <button id="btnShare" class="btn primary" data-action="share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Per Mail senden
+        </button>
+        <button id="btnDownload" class="btn secondary" data-action="download">Als Datei speichern</button>
+        <button id="btnMarkSent" class="link" data-action="toggle-sent"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Übersicht -->
+  <div id="overviewOverlay" class="overlay" hidden>
+    <div class="sheet full" role="dialog" aria-modal="true" aria-labelledby="overviewTitle">
+      <div class="sheet-head">
+        <span style="width:60px"></span>
+        <h2 id="overviewTitle">Übersicht</h2>
+        <button class="done" data-action="close-overview">Fertig</button>
+      </div>
+      <div class="segmented" role="tablist">
+        <button role="tab" data-action="ov-mode" data-mode="month">Monat</button>
+        <button role="tab" data-action="ov-mode" data-mode="project">Projekt</button>
+      </div>
+      <div id="ovBody"></div>
+    </div>
+  </div>
+
+  <!-- Einstellungen -->
+  <div id="settingsOverlay" class="overlay" hidden>
+    <div class="sheet full" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="sheet-head">
+        <span style="width:60px"></span>
+        <h2 id="settingsTitle">Einstellungen</h2>
+        <button class="done" data-action="close-settings">Fertig</button>
+      </div>
+
+      <div class="group-label">Deine Angaben</div>
+      <div class="group">
+        <div class="row"><label for="s-name">Name</label><input id="s-name" type="text" autocomplete="name" placeholder="Vor- und Nachname" data-setting="name"></div>
+        <div class="row"><label for="s-position">Position</label><input id="s-position" type="text" placeholder="z. B. Setaufnahmeleitung" data-setting="position"></div>
+      </div>
+
+      <div class="group-label">Vorlage</div>
+      <div class="group">
+        <div id="tplInfo"></div>
+        <label class="file-btn" for="templateInput" id="tplButton">Vorlage laden</label>
+        <button class="file-btn" id="tplBundled" data-action="use-bundled" hidden>Mitgelieferte Vorlage verwenden</button>
+      </div>
+      <p class="group-note">Die Vorlage der Produktion ist schon enthalten. Eine andere brauchst du nur bei einer neuen Produktion – z. B. aus der Mail über „In Dateien sichern“.</p>
+
+      <div class="group-label">Empfänger</div>
+      <div class="group">
+        <div class="row"><label for="s-toName">Vorname</label><input id="s-toName" type="text" placeholder="Vorname" data-setting="toName"></div>
+        <div class="row"><label for="s-toEmail">E-Mail</label><input id="s-toEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="name@firma.de" data-setting="toEmail"></div>
+      </div>
+      <p class="group-note">Für die Anrede in der Mail. Die Adresse kannst du beim Senden mit einem Tipp kopieren.</p>
+
+      <div class="group-label">Mail-Vorlage</div>
+      <div class="group">
+        <div class="row"><label for="s-mailSubject">Betreff</label><input id="s-mailSubject" type="text" data-setting="mailSubject"></div>
+        <div class="row textarea-row"><textarea id="s-mailBody" rows="7" aria-label="Mail-Text" data-setting="mailBody"></textarea></div>
+        <button class="row-btn" data-action="mail-reset">Standardtext wiederherstellen</button>
+      </div>
+      <p class="group-note">Platzhalter werden beim Senden ersetzt: {Empfänger}, {Vorname}, {Name}, {KW}, {Zeitraum}, {Stunden}, {Position}</p>
+
+      <div class="group-label">Kurzbefehl: Mail komplett ausgefüllt</div>
+      <div class="group">
+        <details class="guide">
+          <summary>Einmal einrichten (ca. 3 Minuten)</summary>
+          <p>Danach öffnet sich die Mail mit Empfänger, Betreff, Text und Excel-Datei – du tippst nur noch auf Senden.</p>
+          <p><b>Schon einen Kurzbefehl „Stundenzettel senden“?</b> Öffne ihn und prüfe Schritt 6: Die Adresse muss beim blauen Wort <b>Empfänger:innen</b> im Satz stehen – nicht in den Feldern „E-Mail-Adressen“ bei Kopie/Blindkopie.</p>
+          <ol>
+            <li>Unten auf <b>Kurzbefehl anlegen</b> tippen (oder in der App Kurzbefehle auf <b>+</b>).</li>
+            <li>Oben auf <b>Neuer Kurzbefehl</b> → <b>Umbenennen</b> → <code>Stundenzettel senden</code>.</li>
+            <li>Im selben Menü <b>Details</b> → <b>Im Share-Sheet anzeigen</b> einschalten → <b>Fertig</b>.</li>
+            <li>Oben steht „<b>Beliebig</b>-Eingabe von Share-Sheet erhalten“: auf <b>Beliebig</b> tippen und nur <b>Dateien</b> anhaken.</li>
+            <li>Unten bei <b>Aktionen suchen</b> „E‑Mail“ eingeben und <b>E‑Mail senden</b> antippen.</li>
+            <li>Die Aktion zeigt den Satz „<b>Nachricht</b> als <b>Betreff</b> an <b>Empfänger:innen</b> senden“. Die drei blauen Wörter ausfüllen:
+              <ul>
+                <li><b>Empfänger:innen</b> (am Satzende) antippen und die Adresse eingeben – das ist das Feld <b>An</b>.</li>
+                <li><b>Betreff</b> antippen, über der Tastatur <b>Kurzbefehleingabe</b> wählen, dann auf das eingefügte blaue Feld tippen und <b>Name</b> wählen. Betreff wird z. B. „Stundenzettel KW 42 2026 - Dein Name“.</li>
+                <li><b>Nachricht</b> antippen, Text schreiben (z. B. „Hallo, anbei mein Stundenzettel. Viele Grüße …“) und danach über der Tastatur <b>Kurzbefehleingabe</b> antippen – das ist die Excel-Datei.</li>
+              </ul>
+            </li>
+            <li>Mit dem kleinen Pfeil die Aktion aufklappen:
+              <ul>
+                <li><b>Kopie</b>: optional deine eigene Adresse – dann bekommst du jede Mail als Kopie und siehst, dass sie raus ist.</li>
+                <li><b>Blindkopie</b>: leer lassen.</li>
+                <li><b>Bereich zum Erstellen anzeigen</b>: eingeschaltet lassen.</li>
+              </ul>
+              Die Felder „E-Mail-Adressen“ hier unten sind nur Kopie/Blindkopie – <b>nicht</b> der Empfänger.
+            </li>
+            <li>Oben rechts <b>Fertig</b>.</li>
+          </ol>
+          <p><b>Benutzen:</b> Per Mail senden → im Teilen-Menü <b>Stundenzettel senden</b> antippen → Senden.</p>
+          <p><b>Tipp:</b> Im Teilen-Menü ganz unten <b>Aktionen bearbeiten …</b> → bei „Stundenzettel senden“ auf <b>+</b> tippen, dann steht er oben.</p>
+        </details>
+        <a class="file-btn" href="shortcuts://create-shortcut">Kurzbefehl anlegen</a>
+      </div>
+
+      <div class="group-label">Unterschrift</div>
+      <div class="group">
+        <div class="sig-wrap">
+          <div id="sigPad">
+            <div class="sig-pad"><canvas id="sigCanvas"></canvas></div>
+            <div class="sig-actions">
+              <button class="btn" data-action="sig-clear">Löschen</button>
+              <button class="btn" data-action="sig-save" id="sigSave">Speichern</button>
+            </div>
+          </div>
+          <div id="sigPreview" hidden>
+            <div class="sig-preview"><img id="sigImg" alt="Gespeicherte Unterschrift"></div>
+            <div class="sig-actions">
+              <button class="btn" data-action="sig-redo">Neu unterschreiben</button>
+              <button class="btn danger" data-action="sig-remove">Entfernen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="group-note">Optional. Wird mit dem Datum des Sendens unter „Ich bestätige die Richtigkeit der gemachten Angaben“ eingefügt.</p>
+
+      <div class="group-label">Daten</div>
+      <div class="group">
+        <button class="row-btn" data-action="backup-export">Backup exportieren</button>
+        <label class="row-btn" for="backupInput">Backup laden</label>
+      </div>
+      <p class="group-note">Alle Daten bleiben auf diesem Gerät. Ein Backup brauchst du nur beim Gerätewechsel. · Version <span id="version"></span></p>
+    </div>
+  </div>
+
+  <input id="templateInput" class="visually-hidden" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" tabindex="-1">
+  <input id="backupInput" class="visually-hidden" type="file" accept=".json,application/json" tabindex="-1">
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="xlsx.js"></script>
+  <script src="pdf.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
