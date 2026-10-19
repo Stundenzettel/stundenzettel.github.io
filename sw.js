@@ -1,5 +1,5 @@
 // Hält die App offline verfügbar. Bei jeder neuen Version CACHE hochzählen.
-const CACHE = 'stundenzettel-v12';
+const CACHE = 'stundenzettel-v13';
 const ASSETS = [
   './',
   './index.html',

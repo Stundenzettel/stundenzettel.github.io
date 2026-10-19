@@ -2,7 +2,7 @@
   'use strict';
 
   const X = window.Stundenzettel;
-  const VERSION = '2.1';
+  const VERSION = '2.2';
   const KEY = 'stundenzettel.v1';
   const TKEY = 'stundenzettel.template.v1';
   const BUNDLED_TEMPLATE = 'vorlage.xlsx';

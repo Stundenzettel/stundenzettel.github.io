@@ -10,6 +10,7 @@
   const BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,500,744,0,278,556,500,1000,556,556,333,1000,667,333,1000,0,611,0,0,278,278,500,500,350,556,1000,333,1000,556,333,944,0,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,333,400,549,333,333,333,576,556,278,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,549,611,611,611,611,611,556,611,556];
 
   const PAGE_W = 842, PAGE_H = 595;
+  const FGF_GRAY = 0.75; // Grau des FGF-Bereichs in der Vorlage (#C0C0C0)
   const WINANSI_EXTRA = {
     0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
     0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93,
@@ -170,24 +171,32 @@
     field('POSITION:', d.position, 470, 128, 124, R - 470 - 124, 13);
     field('WOCHE:', d.weekLabel, L, 156, 92, R - L - 92, 11);
 
-    const cols = [['Wochentag', 80], ['Datum', 66], ['Arbeits-\nbeginn', 62], ['Arbeits-\nende', 62], ['Beginn\nPause', 58],
-      ['Ende\nPause', 58], ['abzgl.\nPause', 54], ['Zeit\ngesamt', 60], ['Bemerkungen / Notiz', 0]];
-    if (d.cateringColumn) cols.push(['Teilnahme\nCatering', 62]);
+    // Spalten wie im Formular. Die vier grauen Spalten sind der „Bereich für FGF“ und bleiben leer.
+    const cols = [['Wochentag', 70], ['Datum', 62], ['Arbeits-\nbeginn', 52], ['Arbeits-\nende', 52], ['Beginn\nPause', 50],
+      ['Ende\nPause', 50], ['abzgl.\nPause', 46], ['Zeit\ngesamt', 52], ['', 34], ['', 34], ['', 34], ['', 34], ['Bemerkungen / Notiz', 0]];
+    const FGF = 8, NOTE = 12, CAT = 13;
+    if (d.cateringColumn) cols.push(['Teilnahme\nSetcatering', 56]);
     const total = R - L;
-    cols[8][1] = total - cols.reduce((s, c) => s + c[1], 0);
+    cols[NOTE][1] = total - cols.reduce((s, c) => s + c[1], 0);
     const xs = [];
     cols.reduce((x, c) => { xs.push(x); return x + c[1]; }, L);
+    const fgfW = xs[NOTE] - xs[FGF];
 
-    const top0 = 176, headH = 30, rowH = 30;
+    const top0 = 196, headH = 30, rowH = 30;
     const bottom = top0 + headH + d.days.length * rowH;
+    p.fill(xs[FGF], top0 - 18, fgfW, 18, FGF_GRAY);
+    p.text(xs[FGF] + 5, top0 - 6, 'Bereich für FGF', 8);
+    p.text(xs[FGF] - 6, top0 - 6, 'bei Abweichungen korrigieren!', 8, { align: 'right' });
     p.fill(L, top0, total, headH, 0.85);
     d.days.forEach((day, r) => {
       const top = top0 + headH + r * rowH;
       p.fill(xs[0], top, cols[0][1], rowH, 0.9);
       p.fill(xs[1], top, cols[1][1], rowH, 0.96);
       p.fill(xs[7], top, cols[7][1], rowH, 0.96);
+      p.fill(xs[FGF], top, fgfW, rowH, FGF_GRAY);
     });
     cols.forEach((c, i) => {
+      if (!c[0]) return;
       const lines = c[0].split('\n');
       lines.forEach((ln, j) => p.text(xs[i] + c[1] / 2, top0 + headH / 2 + 3 + (j - (lines.length - 1) / 2) * 10, ln, 8, { bold: true, align: 'center' }));
     });
@@ -200,10 +209,14 @@
         if (v) p.text(xs[2 + j] + cols[2 + j][1] / 2, mid, v, 10, { align: 'center', bold: j === 5 });
       });
       if (day.note) {
-        const lines = wrap(day.note, 8.5, false, cols[8][1] - 10, 2);
-        lines.forEach((ln, j) => p.text(xs[8] + 5, top + rowH / 2 + 3 + (j - (lines.length - 1) / 2) * 10, ln, 8.5));
+        // Passt die Bemerkung nicht in zwei Zeilen, wird sie kleiner und dreizeilig gesetzt.
+        const maxW = cols[NOTE][1] - 10;
+        const small = wrap(day.note, 8.5, false, maxW, 99).length > 2;
+        const size = small ? 7.5 : 8.5, lh = small ? 8.5 : 10;
+        const lines = wrap(day.note, size, false, maxW, small ? 3 : 2);
+        lines.forEach((ln, j) => p.text(xs[NOTE] + 5, top + rowH / 2 + size * 0.35 + (j - (lines.length - 1) / 2) * lh, ln, size));
       }
-      if (d.cateringColumn) checkbox(p, xs[9] + cols[9][1] / 2, top + rowH / 2, day.catering);
+      if (d.cateringColumn) checkbox(p, xs[CAT] + cols[CAT][1] / 2, top + rowH / 2, day.catering);
     });
     p.box(L, top0, total, bottom - top0, 0.8);
     xs.slice(1).forEach(x => p.line(x, top0, x, bottom, 0.5));
@@ -211,10 +224,13 @@
 
     p.fill(xs[7], bottom, cols[7][1], rowH, 0.96);
     p.box(xs[7], bottom, cols[7][1], rowH, 0.8);
+    p.fill(xs[FGF], bottom, fgfW, rowH, FGF_GRAY);
+    for (let i = FGF + 1; i < NOTE; i++) p.line(xs[i], bottom, xs[i], bottom + rowH, 0.5);
+    p.box(xs[FGF], bottom, fgfW, rowH, 0.8);
     p.text(xs[7] - 8, bottom + rowH / 2 + 3.5, 'Summe', 10, { bold: true, align: 'right' });
     p.text(xs[7] + cols[7][1] / 2, bottom + rowH / 2 + 4, d.total || '', 11, { bold: true, align: 'center' });
 
-    const sTop = bottom + rowH + 28;
+    const sTop = bottom + rowH + 24;
     const lineY = sTop + 60;
     p.text(L, sTop, 'Ich bestätige die Richtigkeit der gemachten Angaben', 10, { bold: true });
     p.line(L, lineY, L + 130, lineY, 0.6);

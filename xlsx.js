@@ -16,7 +16,10 @@
   const TEXT_PART = /\.(xml|rels|vml)$/i;
   const DAY_ROWS = [12, 13, 14, 15, 16, 17, 18];
   const EMU_PER_PX = 9525;
-  const CHECKED_BOX = 'þ'; // Wingdings: Kästchen mit Haken (leer = "q")
+  // Catering-Kästchen als Unicode-Zeichen: Die Vorlage nutzt Wingdings ("q"), die es auf dem iPhone
+  // nicht gibt – dort stünden sonst Buchstaben statt Kästchen.
+  const BOX_CHECKED = '☑', BOX_EMPTY = '☐';
+  const SYMBOL_FONT = 'Segoe UI Symbol';
 
   // ---------- CRC32 ----------
   const CRC_TABLE = (function () {
@@ -395,35 +398,65 @@
     return xml.slice(0, pos) + '<row r="' + rowNo + '">' + cell + '</row>' + xml.slice(pos);
   }
 
-  // Liefert zu einem Zellformat eine Kopie mit Zeilenumbruch (für lange Bemerkungen).
-  function wrapStyles(parts) {
+  // Listen in styles.xml, z. B. <cellXfs> mit <xf>-Einträgen oder <fonts> mit <font>-Einträgen.
+  const styleList = (parts, list) => new RegExp('<' + list + '\\b[^>]*>([\\s\\S]*?)<\\/' + list + '>').exec(parts['xl/styles.xml'] || '');
+
+  function styleItems(parts, list, item) {
+    const block = styleList(parts, list);
+    return block ? block[1].match(new RegExp('<' + item + '\\b[^>]*\\/>|<' + item + '\\b[^>]*>[\\s\\S]*?<\\/' + item + '>', 'g')) || [] : [];
+  }
+
+  // Hängt ein Element an eine Liste an und liefert seinen Index.
+  function appendStyle(parts, list, item, el) {
+    const index = styleItems(parts, list, item).length;
+    const styles = parts['xl/styles.xml'];
+    const block = styleList(parts, list);
+    const updated = block[0]
+      .replace(new RegExp('<\\/' + list + '>$'), () => el + '</' + list + '>')
+      .replace(new RegExp('^(<' + list + '\\b[^>]*\\scount=")\\d+(")'), '$1' + (index + 1) + '$2');
+    parts['xl/styles.xml'] = styles.slice(0, block.index) + updated + styles.slice(block.index + block[0].length);
+    return index;
+  }
+
+  // Liefert zu einem Zellformat eine abgewandelte Kopie (change: xf-XML → xf-XML); je Format nur einmal.
+  function styleVariants(parts, change) {
     const cache = {};
     return s => {
       if (s == null) return s;
       if (s in cache) return cache[s];
-      const styles = parts['xl/styles.xml'];
-      const block = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(styles || '');
-      const xfs = block ? block[1].match(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g) || [] : [];
-      const base = xfs[+s];
+      const base = styleItems(parts, 'cellXfs', 'xf')[+s];
       if (!base) return (cache[s] = s);
-      let xf;
-      if (/<alignment\b/.test(base)) {
-        xf = base.replace(/<alignment\b([^>]*?)(\/?)>/, (m, attrs, slash) =>
-          '<alignment' + attrs.replace(/\swrapText="[^"]*"/, '') + ' wrapText="1"' + slash + '>');
-      } else if (/\/>$/.test(base)) {
-        xf = base.slice(0, -2) + '><alignment wrapText="1"/></xf>';
-      } else {
-        xf = base.replace(/^(<xf\b[^>]*>)/, '$1<alignment wrapText="1"/>');
-      }
-      if (!/\sapplyAlignment=/.test(xf)) xf = xf.replace(/^<xf\b/, '<xf applyAlignment="1"');
-      const index = xfs.length;
-      const updated = block[0]
-        .replace(/<\/cellXfs>$/, xf + '</cellXfs>')
-        .replace(/^(<cellXfs\b[^>]*\scount=")\d+(")/, '$1' + (index + 1) + '$2');
-      parts['xl/styles.xml'] = styles.slice(0, block.index) + updated + styles.slice(block.index + block[0].length);
-      return (cache[s] = String(index));
+      return (cache[s] = String(appendStyle(parts, 'cellXfs', 'xf', change(base))));
     };
   }
+
+  // Kopie mit Zeilenumbruch (für lange Bemerkungen).
+  const wrapStyles = parts => styleVariants(parts, base => {
+    let xf;
+    if (/<alignment\b/.test(base)) {
+      xf = base.replace(/<alignment\b([^>]*?)(\/?)>/, (m, attrs, slash) =>
+        '<alignment' + attrs.replace(/\swrapText="[^"]*"/, '') + ' wrapText="1"' + slash + '>');
+    } else if (/\/>$/.test(base)) {
+      xf = base.slice(0, -2) + '><alignment wrapText="1"/></xf>';
+    } else {
+      xf = base.replace(/^(<xf\b[^>]*>)/, '$1<alignment wrapText="1"/>');
+    }
+    if (!/\sapplyAlignment=/.test(xf)) xf = xf.replace(/^<xf\b/, '<xf applyAlignment="1"');
+    return xf;
+  });
+
+  // Kopie mit einer Schrift, die die Kästchen-Zeichen enthält (Schriftgröße der Vorlage bleibt).
+  const symbolStyles = parts => styleVariants(parts, base => {
+    const fontId = +(attr(/^<xf\b[^>]*>/.exec(base)[0], 'fontId') || 0);
+    const font = (styleItems(parts, 'fonts', 'font')[fontId] || '<font/>')
+      .replace(/<(name|charset|family|scheme)\b[^>]*\/>/g, '')
+      .replace(/^<font\b([^>]*?)\/>$/, '<font$1></font>')
+      .replace(/<\/font>$/, '<name val="' + SYMBOL_FONT + '"/><family val="2"/></font>');
+    const id = appendStyle(parts, 'fonts', 'font', font);
+    let xf = /\sfontId="/.test(base) ? base.replace(/\sfontId="\d+"/, ' fontId="' + id + '"') : base.replace(/^<xf\b/, '<xf fontId="' + id + '"');
+    if (!/\sapplyFont=/.test(xf)) xf = xf.replace(/^<xf\b/, '<xf applyFont="1"');
+    return xf;
+  });
 
   function insertBefore(xml, re, snippet) {
     const m = re.exec(xml);
@@ -526,6 +559,7 @@
     let xml = parts[path];
     const base = excelSerial(input.monday);
     const wrap = wrapStyles(parts);
+    const symbol = symbolStyles(parts);
 
     if (input.name) xml = putCell(xml, 'B7', strCell(input.name));
     if (input.position) xml = putCell(xml, 'K7', strCell(input.position));
@@ -544,7 +578,7 @@
       xml = putCell(xml, 'G' + r, formulaCell(G));
       xml = putCell(xml, 'H' + r, formulaCell(H));
       xml = putCell(xml, 'M' + r, d.note ? (ref, s) => strCell(d.note)(ref, wrap(s)) : emptyCell());
-      if (tpl.info.catering && d.catering) xml = putCell(xml, 'N' + r, strCell(CHECKED_BOX));
+      if (tpl.info.catering) xml = putCell(xml, 'N' + r, (ref, s) => strCell(d.catering ? BOX_CHECKED : BOX_EMPTY)(ref, symbol(s)));
     });
     xml = putCell(xml, 'H19', formulaCell(totals.length ? totals.reduce((a, b) => a + b, 0) : ' '));
     // Spalte "Teilnahme Setcatering" ist in der Vorlage ausgeblendet – einblenden, damit die Häkchen sichtbar sind.
